@@ -1,6 +1,6 @@
 # Black-Box Optimisation Capstone — Imperial College London
 
-Bayesian Optimisation of eight unknown functions using Gaussian Process surrogates and a function-specific exploration–exploitation strategy, extended in Week 4 with neural network surrogates built in TensorFlow.
+Bayesian Optimisation of eight unknown functions using Gaussian Process surrogates and a function-specific exploration–exploitation strategy, extended in Week 4 with TensorFlow neural network surrogates and Week 5 with PyTorch.
 
 ---
 
@@ -76,18 +76,43 @@ Week 4 adds a TensorFlow MLP surrogate alongside the GP:
 - **Sensitivity**: `tf.GradientTape` used to compute `|∂output/∂x_i|` at best known point — ranks which input dimensions are most influential
 - **Validation**: RBF-SVM classifies observations into top-30% (good) / bottom-70% (poor) and checks whether the proposed query falls in the good region
 
+### Week 5: Neural Network Surrogate (PyTorch)
+
+Week 5 switches the NN surrogate to PyTorch, following the same pipeline but using PyTorch-native patterns:
+
+- **Architecture**: `nn.Module` with `nn.Sequential([Linear(n, 64), ReLU, Dropout(0.1), Linear(64, 64), ReLU, Dropout(0.1), Linear(64, 1)])`
+- **Training**: `loss.backward()` + `torch.optim.Adam`, weight_decay=1e-3, 1500 epochs
+- **Acquisition**: Dual strategy — NN gradient ascent on `torch.tensor(..., requires_grad=True)` input (800 steps) vs GP UCB/EI on a 30k random grid
+- **Sensitivity**: `score.backward()` then `x_sens.grad.abs()` — same dimension importance ranking as Week 4 but in PyTorch
+- **Y scaling**: Direct `StandardScaler(Y)` replacing `log(|Y|)` — fixes sign inversion for negative-output functions (F3, F4, F6)
+
+**Per-function strategy for Week 5** based on Week 4 results:
+
+| Function | W4 result | W5 approach |
+|----------|-----------|-------------|
+| F1 | −0.01281 (worse) | EI from W1 best, trust ±0.08 |
+| F2 | −0.05481 (worse) | UCB from W2 best, trust ±0.10 |
+| F3 | −0.1255 (best so far) | UCB exploit near W4, trust ±0.15 |
+| F4 | −48.0 (worst ever) | EI from W1 best, avoid corners |
+| F5 | **3531** (huge jump) | UCB tight exploit, trust ±0.07 |
+| F6 | −0.982 (worst ever) | EI from W3 best |
+| F7 | 0.998 (W3 was better) | UCB from W3 best, trust ±0.08 |
+| F8 | **9.518** (improved) | UCB exploit near W4, trust ±0.12 |
+
 ---
 
-## Results Summary (Weeks 1–4)
+## Results Summary (Weeks 1–5)
 
-| Function | Dims | W1 | W2 | W3 | W4 submitted |
-|----------|------|----|----|----|--------------|
-| F1 | 2 | 2.82e-4 | 0.0 | ~0 | 0.639955-0.673176 |
-| F3 | 3 | −0.476 | −0.196 | improving | — |
-| F5 | 4 | 984 | **1192** | strong | — |
-| F7 | 6 | 0.679 | 0.775 | improving | — |
-| F4 | 4 | −24.5 | −28.6 | switched to EI | — |
-| F8 | 8 | 7.28 | 7.63 | switched to EI | — |
+| Function | Dims | Best W1–W3 | W4 result | W4 best? | W5 strategy |
+|----------|------|------------|-----------|----------|-------------|
+| F1 | 2 | 2.82e-4 (W1) | −0.01281 | No | EI from W1 best |
+| F2 | 2 | 0.14927 (W2) | −0.05481 | No | UCB from W2 best |
+| F3 | 3 | −0.160 (W3) | −0.1255 | **Yes** | Exploit near W4 |
+| F4 | 4 | −24.548 (W1) | −48.0 | No | EI from W1 best |
+| F5 | 4 | 1192 (W2) | **3531** | **Yes** | Tight exploit near W4 |
+| F6 | 5 | −0.557 (W3) | −0.982 | No | EI from W3 best |
+| F7 | 6 | 1.235 (W3) | 0.998 | No | UCB from W3 best |
+| F8 | 8 | 9.038 (W3) | **9.518** | **Yes** | Exploit near W4 |
 
 ---
 
@@ -108,9 +133,13 @@ week4/
   data/
   notebooks/     NN surrogate (TensorFlow) + GP fallback
   notebooks/week4_strategy_reflection.ipynb
+week5/
+  data/
+  notebooks/     NN surrogate (PyTorch) + GP fallback
+  notebooks/week5_strategy_reflection.ipynb
 ```
 
-Each function notebook is self-contained: load data → fit surrogate → run acquisition → print submission string.
+Each function notebook is self-contained: load data → fit surrogate → run acquisition → print submission string. The `weekly_log` cell in each notebook tracks every submitted input and received output across all weeks and syncs them to the `.npy` data files.
 
 ---
 
@@ -121,9 +150,8 @@ Each function notebook is self-contained: load data → fit surrogate → run ac
 | `scikit-learn` | GaussianProcessRegressor, RBF kernel, SVC |
 | `scipy` | EI acquisition (norm.cdf, norm.pdf) |
 | `TensorFlow / Keras` | NN surrogate (Week 4): Sequential API, GradientTape training |
+| `PyTorch` | NN surrogate (Week 5): nn.Module, loss.backward(), requires_grad |
 | `numpy` | Array operations, grid search |
-
-Week 5 will introduce **PyTorch** as an alternative framework for the surrogate model.
 
 ---
 
